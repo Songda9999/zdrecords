@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zendesk 聊天记录抓取工具</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        html, body {
+            /* 强制移除所有默认边距和填充，确保全屏 */
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            /* 强制移除 Flexbox 布局，让内容直接占据整个视窗 */
+            display: block !important;
+            /* 强制设置背景颜色为白色，以覆盖外部容器的背景 */
+            background-color: white !important;
+        }
+        /* 隐藏滚动条 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+        /* 隐藏 type="number" 的上下箭头 */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        /* 强制pre标签中的文本自动换行 */
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+<!-- 移动端提示信息，在 sm 断点以下显示 -->
+<div class="flex sm:hidden h-full w-full items-center justify-center bg-gray-50 text-gray-700 p-8">
+    <div class="text-center">
+        <i class="fas fa-mobile-alt text-6xl mb-4" style="color: #35cbcb;"></i>
+        <h1 class="text-2xl font-bold mb-2">手机视图暂不支持</h1>
+        <p class="text-base text-gray-600">请在网页版浏览器中打开此应用以获得最佳体验。</p>
+    </div>
+</div>
+
+<!-- 桌面端应用主体，在 sm 断点以上显示 -->
+<div class="hidden sm:flex h-full w-full bg-white shadow-xl rounded-2xl overflow-hidden">
+    <!-- 左侧控制面板 -->
+    <div class="flex flex-col w-1/4 min-w-[250px] p-4 border-r border-gray-200 bg-gray-50">
+        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center justify-between">
+            Zendesk 查询工具
+            <i class="fas fa-comment-dots text-2xl" style="color: #35cbcb;"></i>
+        </h2>
+        <div class="flex items-center gap-2 mb-4">
+            <input type="number" id="ticketIdInput" placeholder="输入 Ticket ID" class="flex-grow p-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2" style="--tw-ring-color: #35cbcb; --tw-ring-opacity: 1;" text-sm shadow-inner transition-all duration-200">
+            <button id="fetchButton" class="text-white font-semibold py-2 px-4 rounded-xl transition-all duration-200 transform hover:scale-105 shadow-md hover:shadow-lg text-sm" style="background-color: #35cbcb; color: #ffffff;">
+                <i class="fas fa-search"></i>
+            </button>
+        </div>
+        <div id="statusMessage" class="text-center text-red-500 p-1 font-medium text-xs"></div>
+
+        <!-- 使用指南卡片 -->
+        <div class="bg-white rounded-xl shadow-md p-4 mt-2 mb-6 border border-gray-200">
+            <h3 class="text-lg font-bold text-gray-800 mb-2 flex items-center">
+                <i class="fas fa-info-circle mr-2" style="color: #35cbcb;"></i>
+                使用指南
+            </h3>
+            <p class="text-sm text-gray-600 mb-2">1. 在上方输入框中粘贴 **Zendesk Ticket ID**。</p>
+            <p class="text-sm text-gray-600 mb-2">2. 点击搜索按钮或按 **Enter** 键开始查询。</p>
+            <p class="text-sm text-gray-600">3. 聊天记录将显示在右侧面板。</p>
+        </div>
+
+        <!-- 如何查找 Ticket ID 的指南，现在默认显示，排版与“使用指南”一致，URL显示优化 -->
+        <div class="bg-white rounded-xl shadow-md p-4 mt-2 mb-6 border border-gray-200">
+            <h3 class="flex items-center w-full text-lg font-bold text-gray-800 mb-2">
+                <i class="fas fa-search-location mr-2" style="color: #35cbcb;"></i>
+                <span>如何查找 Ticket ID?</span>
+            </h3>
+            <div class="mt-2 text-sm text-gray-600">
+                <p class="mb-2">在 Zendesk 中，Ticket ID 是用于唯一标识工单或聊天会话的数字。最简单的方法是查看浏览器地址栏中的 URL。</p>
+                <ol class="list-decimal list-inside">
+                    <li>打开 Zendesk 聊天或工单页面。</li>
+                    <li>查看 URL：地址栏中会显示类似下面的 URL：</li>
+                    <pre class="bg-gray-100 p-2 my-2 rounded-md text-xs font-mono">`https://yourcompany.zendesk.com/agent/tickets/12345`</pre>
+                    <li>识别 ID：URL 中 `/agent/tickets/` 后的数字即为 Ticket ID。例如：`12345`。</li>
+                </ol>
+            </div>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto no-scrollbar">
+            <!-- 占位符，如果需要添加其他内容，可以在这里添加 -->
+        </div>
+    </div>
+
+    <!-- 右侧聊天记录主体 -->
+    <div class="flex-1 overflow-y-auto p-4 flex flex-col items-center">
+        <div id="chat-log" class="w-full max-w-2xl no-scrollbar font-mono text-sm leading-relaxed whitespace-pre-wrap">
+            <!-- 默认初始消息，包含 GIF 和文本 -->
+            <div id="initial-message" class="text-center text-gray-600 mt-24">
+                <img src="https://i.ibb.co/9mmhjw1F/magnifying-glass.gif" alt="放大镜图标" class="mx-auto w-24 h-24 mb-4">
+                <p class="text-base">请输入 Ticket ID 查看聊天记录...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 获取 DOM 元素
+        const ticketIdInput = document.getElementById('ticketIdInput');
+        const fetchButton = document.getElementById('fetchButton');
+        const chatLog = document.getElementById('chat-log');
+        const statusMessage = document.getElementById('statusMessage');
+        const initialMessage = document.getElementById('initial-message');
+        
+        // 正则表达式用于解析聊天标题
+        const titlePattern = /在线交谈开始于\s(.*)|Conversation with (\d+)/;
+        // 正则表达式用于解析带有时间戳的消息行
+        const messageStartPattern = /^\s*(\(\d{2}:\d{2}:\d{2}\))\s(.*?):\s([\s\S]*)/;
+        // 正则表达式用于解析系统消息
+        const systemMessagePattern = /^\s*(\(\d{2}:\d{2}:\d{2}\))\s\*\*\*(.*)\*\*\*/;
+        // 正则表达式用于解析附件行，只捕获文件名
+        const attachmentLinePattern = /^(.*uploaded:)(.*)\.png/;
+
+        /**
+         * 渲染普通文本行到界面上
+         * @param {string} text - 文本内容
+         * @param {string} type - 消息类型 ('title', 'system', 'message', 'attachment')
+         */
+        function renderText(text, type) {
+            // 如果文本为空或null，则不进行渲染
+            if (!text || text.trim() === '') {
+                return;
+            }
+            const messageDiv = document.createElement('div');
+            
+            if (type === 'title') {
+                messageDiv.className = 'text-center text-xs text-gray-500 font-semibold mb-2';
+                messageDiv.textContent = text;
+            } else if (type === 'system') {
+                messageDiv.className = 'text-center text-gray-400 my-1';
+                messageDiv.textContent = text;
+            } else if (type === 'attachment') {
+                messageDiv.className = 'flex items-center text-gray-800 my-1';
+                messageDiv.innerHTML = `<i class="fas fa-paperclip text-gray-500 mr-2"></i><span>${text}</span>`;
+            } else {
+                 messageDiv.className = 'whitespace-pre-wrap text-gray-800';
+                 // 精简消息文本中的多余空格
+                 const formattedText = text.replace(/ \((\d{2}:\d{2}:\d{2})\)\s+(\w+):\s+/, `($1) $2: `);
+                 messageDiv.textContent = formattedText;
+            }
+            
+            chatLog.appendChild(messageDiv);
+        }
+
+        /**
+         * 异步获取聊天记录
+         */
+        async function fetchChatRecords() {
+            const ticketId = ticketIdInput.value.trim();
+
+            if (!ticketId) {
+                statusMessage.textContent = '请输入一个有效的 Ticket ID。';
+                return;
+            }
+
+            // 清空之前的记录
+            chatLog.innerHTML = '';
+            statusMessage.textContent = '';
+
+            // 显示新的加载中提示，使用 Font Awesome 旋转图标
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'loading-message';
+            loadingDiv.className = 'text-center text-gray-600 mt-24 text-sm flex flex-col items-center';
+            loadingDiv.innerHTML = `<i class="fas fa-spinner fa-spin text-4xl" style="color: #35cbcb;"></i><p>加载中...</p>`;
+            chatLog.appendChild(loadingDiv);
+
+            const workerUrl = 'https://zdrecords.sokdana2233.workers.dev'; 
+            const url = `${workerUrl}/api/v2/tickets/${ticketId}/comments.json`;
+
+            try {
+                const response = await fetch(url);
+                
+                // 移除加载中提示
+                loadingDiv.remove();
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new Error('Ticket ID 未找到，请检查ID是否正确。');
+                    }
+                    throw new Error('网络请求失败，状态码: ' + response.status);
+                }
+                const data = await response.json();
+                
+                if (data && data.comments && data.comments.length > 0) {
+                    let fullText = '';
+                    
+                    // 提取并渲染新的日期标题
+                    const firstCommentTime = new Date(data.comments[0].created_at);
+                    const timezoneOffset = firstCommentTime.getTimezoneOffset() / -60; // Get timezone offset in hours
+                    const formattedDateTitle = `${firstCommentTime.getFullYear()} 年 ${firstCommentTime.getMonth() + 1} 月 ${firstCommentTime.getDate()} 日 开始会话时间于 ${firstCommentTime.getHours().toString().padStart(2, '0')}:${firstCommentTime.getMinutes().toString().padStart(2, '0')}:${firstCommentTime.getSeconds().toString().padStart(2, '0')} UTC+${timezoneOffset}`;
+                    renderText(formattedDateTitle, 'title');
+                    
+                    // 将所有评论文本拼接成一个长字符串
+                    data.comments.forEach(comment => {
+                        if (comment && comment.plain_body) {
+                            fullText += comment.plain_body + '\n\n';
+                        }
+                    });
+                    
+                    // 移除原始标题，以便后续解析
+                    fullText = fullText.replace(titlePattern, '').trim();
+                    
+                    // 按行分割文本
+                    const lines = fullText.split('\n');
+                    let currentMessage = '';
+                    
+                    lines.forEach(line => {
+                        line = line.trim();
+                        if (line.length === 0) {
+                            if (currentMessage.length > 0) {
+                                renderText(currentMessage, 'message');
+                                currentMessage = '';
+                            }
+                            return;
+                        }
+
+                        // 检查是否是附件的详细信息行，如果是，则跳过
+                        if (line.startsWith('URL:') || line.startsWith('Type:') || line.startsWith('Size:')) {
+                            return;
+                        }
+                        
+                        // 检查是否是新的消息开始
+                        if (line.match(messageStartPattern)) {
+                            if (currentMessage.length > 0) {
+                                renderText(currentMessage, 'message');
+                            }
+                            currentMessage = line;
+                        } else if (line.match(systemMessagePattern)) {
+                             if (currentMessage.length > 0) {
+                                 renderText(currentMessage, 'message');
+                             }
+                            renderText(line, 'system');
+                            currentMessage = ''; // 系统消息单独渲染后，重置当前消息
+                        } else if (line.match(attachmentLinePattern)) {
+                            // 渲染精简后的附件信息
+                            const filenameMatch = line.match(attachmentLinePattern);
+                            if (filenameMatch && filename[2]) {
+                                const filename = filenameMatch[2].trim() + '.png';
+                                renderText(filename, 'attachment');
+                            }
+                        } else {
+                            // 否则，是上一条消息的延续
+                            currentMessage += '\n' + line;
+                        }
+                    });
+
+                    // 渲染最后一条消息
+                    if (currentMessage.length > 0) {
+                        renderText(currentMessage, 'message');
+                    }
+
+                    chatLog.scrollTop = chatLog.scrollHeight;
+                } else {
+                    // 如果数据为空，则显示“暂无数据”的文本
+                    chatLog.innerHTML = `<div class="text-center text-gray-600 mt-24">暂无数据...</div>`;
+                }
+            } catch (error) {
+                console.error('获取数据时发生错误:', error);
+                statusMessage.textContent = '加载聊天记录失败。' + error.message;
+                // 更新错误信息和图标
+                chatLog.innerHTML = `
+                    <div class="text-center text-gray-600 mt-24 flex flex-col items-center">
+                        <img src="https://i.ibb.co/d4mBKQ3V/no-data.gif" alt="无数据图标" class="mx-auto w-24 h-24 mb-4">
+                        <p class="text-base">Ticket ID 未找到，请检查ID是否正确。</p>
+                    </div>
+                `;
+            }
+        }
+
+        // 按钮点击事件
+        fetchButton.addEventListener('click', fetchChatRecords);
+
+        // 输入框的键盘事件监听
+        ticketIdInput.addEventListener('keypress', (event) => {
+            // 检查按下的键是否是 Enter
+            if (event.key === 'Enter') {
+                event.preventDefault(); // 阻止默认的表单提交行为
+                fetchChatRecords();
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
